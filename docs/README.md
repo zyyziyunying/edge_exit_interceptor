@@ -1,0 +1,14 @@
+# Docs
+
+This package keeps its documentation local to the package so design decisions,
+constraints, and implementation notes evolve with the code.
+
+## Structure
+
+- `docs/problem/`: active implementation-facing constraints and MVP rules
+- `docs/knowledge/`: background knowledge that explains why this package exists
+
+## Current documents
+
+- `docs/problem/mvp_scope.md`
+- `docs/knowledge/ios_popscope_limitations.md`
