@@ -94,6 +94,7 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
   late final AnimationController _resetController;
   Animation<double>? _offsetAnimation;
   double _dragOffset = 0;
+  bool _isTriggerInFlight = false;
 
   @override
   void initState() {
@@ -129,6 +130,7 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
       return widget.child;
     }
 
+    final bool canHandleGesture = !_isTriggerInFlight;
     final bool isLtr = _isLtr(context);
     final double triggerProgress = _progressFor(_dragOffset);
     final double visualOffset = _visualOffsetFor(_dragOffset, widget.config);
@@ -159,10 +161,18 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
               width: widget.config.edgeHitWidth,
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
-                onHorizontalDragStart: _onHorizontalDragStart,
-                onHorizontalDragUpdate: _onHorizontalDragUpdate,
-                onHorizontalDragEnd: _onHorizontalDragEnd,
-                onHorizontalDragCancel: _onHorizontalDragCancel,
+                onHorizontalDragStart: canHandleGesture
+                    ? _onHorizontalDragStart
+                    : null,
+                onHorizontalDragUpdate: canHandleGesture
+                    ? _onHorizontalDragUpdate
+                    : null,
+                onHorizontalDragEnd: canHandleGesture
+                    ? _onHorizontalDragEnd
+                    : null,
+                onHorizontalDragCancel: canHandleGesture
+                    ? _onHorizontalDragCancel
+                    : null,
               ),
             ),
           ),
@@ -208,8 +218,10 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
         dragOffsetSnapshot >= widget.config.triggerOffset;
     final bool meetsVelocity = velocity >= widget.config.minFlingVelocity;
 
-    if ((meetsThreshold || meetsVelocity) && widget.onTrigger != null) {
-      _invokeTrigger(
+    if ((meetsThreshold || meetsVelocity) &&
+        widget.onTrigger != null &&
+        !_isTriggerInFlight) {
+      _invokeTriggerGuarded(
         EdgeExitTriggerDetails(
           dragOffset: dragOffsetSnapshot,
           dragProgress: progressSnapshot,
@@ -225,19 +237,33 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
     _animateBackToRest();
   }
 
-  void _invokeTrigger(EdgeExitTriggerDetails details) {
+  void _invokeTriggerGuarded(EdgeExitTriggerDetails details) {
     final EdgeExitTrigger? onTrigger = widget.onTrigger;
-    if (onTrigger == null) {
+    if (onTrigger == null || _isTriggerInFlight) {
       return;
     }
 
+    setState(() {
+      _isTriggerInFlight = true;
+    });
+    unawaited(_runTrigger(onTrigger, details));
+  }
+
+  Future<void> _runTrigger(
+    EdgeExitTrigger onTrigger,
+    EdgeExitTriggerDetails details,
+  ) async {
     try {
-      final FutureOr<void> result = onTrigger(details);
-      if (result is Future<void>) {
-        unawaited(result);
-      }
+      await Future<void>.sync(() => onTrigger(details));
     } catch (_) {
       // Swallow callback exceptions to avoid breaking gesture flow.
+    } finally {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isTriggerInFlight = false;
+      });
     }
   }
 
