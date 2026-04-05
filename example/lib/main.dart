@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_exit_interceptor/edge_exit_interceptor.dart';
 
@@ -39,11 +40,21 @@ class HomePage extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ),
+            const SizedBox(height: 12),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'Integration note: if this page still has native/Cupertino '
+                'back gestures, disable or avoid those routes separately. '
+                'This package does not auto-disable them.',
+                textAlign: TextAlign.center,
+              ),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute<void>(
+                  CupertinoPageRoute<void>(
                     builder: (_) => const GuardedExitPage(),
                   ),
                 );
@@ -65,6 +76,8 @@ class GuardedExitPage extends StatefulWidget {
 }
 
 class _GuardedExitPageState extends State<GuardedExitPage> {
+  bool _allowPop = false;
+
   Future<void> _handleEdgeTrigger(EdgeExitTriggerDetails details) async {
     final bool? shouldExit = await showDialog<bool>(
       context: context,
@@ -90,27 +103,38 @@ class _GuardedExitPageState extends State<GuardedExitPage> {
     );
 
     if (shouldExit == true && mounted) {
+      _allowPop = true;
       Navigator.of(context).pop();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return EdgeExitInterceptor(
-      onTrigger: _handleEdgeTrigger,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Guarded Exit Page')),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              'Try a left-edge swipe to trigger the guarded exit dialog.\n'
-              'Confirm pops. Cancel stays.',
-              textAlign: TextAlign.center,
+    return PopScope(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (bool didPop, result) => _onWillPop(),
+      child: EdgeExitInterceptor(
+        onTrigger: _handleEdgeTrigger,
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Guarded Exit Page')),
+          body: const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'Try a left-edge swipe to trigger the guarded exit dialog.\n'
+                'Confirm pops. Cancel stays.\n\n'
+                'If native/Cupertino back gesture is still active on this page, '
+                'disable or avoid it in app routing.',
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<bool> _onWillPop() async {
+    return _allowPop;
   }
 }

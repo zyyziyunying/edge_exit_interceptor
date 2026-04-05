@@ -5,16 +5,19 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Widget _buildHarness({required EdgeExitInterceptor interceptor}) {
+  Widget buildHarness({
+    required EdgeExitInterceptor interceptor,
+    TextDirection textDirection = TextDirection.ltr,
+  }) {
     return Directionality(
-      textDirection: TextDirection.ltr,
+      textDirection: textDirection,
       child: Center(
         child: SizedBox(width: 300, height: 200, child: interceptor),
       ),
     );
   }
 
-  double _childTranslationX(WidgetTester tester) {
+  double childTranslationX(WidgetTester tester) {
     final Transform transform = tester.widget<Transform>(
       find.byKey(const Key('edge_exit_interceptor.child_transform')),
     );
@@ -25,7 +28,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      _buildHarness(
+      buildHarness(
         interceptor: const EdgeExitInterceptor(child: SizedBox.expand()),
       ),
     );
@@ -37,7 +40,7 @@ void main() {
     await gesture.moveBy(const Offset(24, 0));
     await tester.pump();
 
-    expect(_childTranslationX(tester), greaterThan(0));
+    expect(childTranslationX(tester), greaterThan(0));
     expect(
       find.byKey(const Key('edge_exit_interceptor.indicator')),
       findsOneWidget,
@@ -46,7 +49,7 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(_childTranslationX(tester), closeTo(0, 0.01));
+    expect(childTranslationX(tester), closeTo(0, 0.01));
   });
 
   testWidgets('trigger callback fires once when threshold is reached', (
@@ -56,7 +59,7 @@ void main() {
     EdgeExitTriggerDetails? callbackDetails;
 
     await tester.pumpWidget(
-      _buildHarness(
+      buildHarness(
         interceptor: EdgeExitInterceptor(
           onTrigger: (EdgeExitTriggerDetails details) {
             triggerCount += 1;
@@ -91,7 +94,7 @@ void main() {
     EdgeExitTriggerDetails? callbackDetails;
 
     await tester.pumpWidget(
-      _buildHarness(
+      buildHarness(
         interceptor: EdgeExitInterceptor(
           onTrigger: (EdgeExitTriggerDetails details) {
             triggerCount += 1;
@@ -126,7 +129,7 @@ void main() {
     int triggerCount = 0;
 
     await tester.pumpWidget(
-      _buildHarness(
+      buildHarness(
         interceptor: EdgeExitInterceptor(
           onTrigger: (_) {
             triggerCount += 1;
@@ -151,7 +154,7 @@ void main() {
     int triggerCount = 0;
 
     await tester.pumpWidget(
-      _buildHarness(
+      buildHarness(
         interceptor: EdgeExitInterceptor(
           enabled: false,
           onTrigger: (_) {
@@ -174,13 +177,143 @@ void main() {
   });
 
   testWidgets(
+    'disabling mid-drag animates back before removing the interactive shell',
+    (tester) async {
+      int triggerCount = 0;
+
+      await tester.pumpWidget(
+        buildHarness(
+          interceptor: EdgeExitInterceptor(
+            enabled: true,
+            onTrigger: (_) {
+              triggerCount += 1;
+            },
+            config: const EdgeExitInterceptorConfig(
+              resetDuration: Duration(milliseconds: 200),
+              triggerOffset: 20,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+
+      final Offset topLeft = tester.getTopLeft(
+        find.byType(EdgeExitInterceptor),
+      );
+      final TestGesture gesture = await tester.startGesture(
+        topLeft + const Offset(2, 100),
+      );
+      await gesture.moveBy(const Offset(24, 0));
+      await tester.pump();
+
+      expect(childTranslationX(tester), greaterThan(0));
+
+      await tester.pumpWidget(
+        buildHarness(
+          interceptor: EdgeExitInterceptor(
+            enabled: false,
+            onTrigger: (_) {
+              triggerCount += 1;
+            },
+            config: const EdgeExitInterceptorConfig(
+              resetDuration: Duration(milliseconds: 200),
+              triggerOffset: 20,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('edge_exit_interceptor.child_transform')),
+        findsOneWidget,
+      );
+
+      final double offsetBeforeDisabledMove = childTranslationX(tester);
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      final double offsetAfterDisabledMove = childTranslationX(tester);
+      expect(
+        offsetAfterDisabledMove,
+        closeTo(offsetBeforeDisabledMove, 0.01),
+      );
+
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(childTranslationX(tester), greaterThan(0));
+
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('edge_exit_interceptor.child_transform')),
+        findsNothing,
+      );
+      expect(triggerCount, 0);
+    },
+  );
+
+  testWidgets('rtl mode activates from the right edge', (tester) async {
+    int triggerCount = 0;
+
+    await tester.pumpWidget(
+      buildHarness(
+        textDirection: TextDirection.rtl,
+        interceptor: EdgeExitInterceptor(
+          onTrigger: (_) {
+            triggerCount += 1;
+          },
+          config: const EdgeExitInterceptorConfig(triggerOffset: 20),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+
+    final Rect pageRect = tester.getRect(find.byType(EdgeExitInterceptor));
+    await tester.dragFrom(
+      pageRect.topRight - const Offset(2, -100),
+      const Offset(-40, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(triggerCount, 1);
+    expect(
+      find.byKey(const Key('edge_exit_interceptor.indicator')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('mostly vertical drags do not trigger the interceptor', (
+    tester,
+  ) async {
+    int triggerCount = 0;
+
+    await tester.pumpWidget(
+      buildHarness(
+        interceptor: EdgeExitInterceptor(
+          onTrigger: (_) {
+            triggerCount += 1;
+          },
+          config: const EdgeExitInterceptorConfig(triggerOffset: 20),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+
+    final Offset topLeft = tester.getTopLeft(find.byType(EdgeExitInterceptor));
+    await tester.dragFrom(topLeft + const Offset(2, 80), const Offset(8, 72));
+    await tester.pumpAndSettle();
+
+    expect(triggerCount, 0);
+    expect(childTranslationX(tester), closeTo(0, 0.01));
+  });
+
+  testWidgets(
     'while trigger is in flight, gestures do not trigger repeatedly',
     (tester) async {
       final Completer<void> completer = Completer<void>();
       int triggerCount = 0;
 
       await tester.pumpWidget(
-        _buildHarness(
+        buildHarness(
           interceptor: EdgeExitInterceptor(
             onTrigger: (_) {
               triggerCount += 1;
@@ -208,7 +341,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(triggerCount, 1);
-      expect(_childTranslationX(tester), closeTo(0, 0.01));
+      expect(childTranslationX(tester), closeTo(0, 0.01));
 
       completer.complete();
       await tester.pump();
@@ -227,7 +360,7 @@ void main() {
     int triggerCount = 0;
 
     await tester.pumpWidget(
-      _buildHarness(
+      buildHarness(
         interceptor: EdgeExitInterceptor(
           onTrigger: (_) async {
             triggerCount += 1;

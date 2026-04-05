@@ -1,3 +1,3 @@
-library edge_exit_interceptor;
+library;
 
 export 'src/edge_exit_interceptor.dart';

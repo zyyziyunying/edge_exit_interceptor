@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show Color;
 
-import 'package:flutter/animation.dart';
 import 'package:flutter/widgets.dart';
 
 /// Called when the custom edge-exit gesture has crossed its trigger boundary.
@@ -126,11 +124,16 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.enabled) {
+    final bool shouldRenderInteractiveShell =
+        widget.enabled ||
+        _dragOffset != 0 ||
+        _resetController.isAnimating ||
+        _isTriggerInFlight;
+    if (!shouldRenderInteractiveShell) {
       return widget.child;
     }
 
-    final bool canHandleGesture = !_isTriggerInFlight;
+    final bool canHandleGesture = widget.enabled && !_isTriggerInFlight;
     final bool isLtr = _isLtr(context);
     final double triggerProgress = _progressFor(_dragOffset);
     final double visualOffset = _visualOffsetFor(_dragOffset, widget.config);
@@ -209,6 +212,11 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
+    if (!widget.enabled) {
+      _animateBackToRest();
+      return;
+    }
+
     final double sign = _isLtr(context) ? 1 : -1;
     final double velocity = details.velocity.pixelsPerSecond.dx * sign;
     final double dragOffsetSnapshot = _dragOffset;
@@ -256,14 +264,13 @@ class _EdgeExitInterceptorState extends State<EdgeExitInterceptor>
     try {
       await Future<void>.sync(() => onTrigger(details));
     } catch (_) {
-      // Swallow callback exceptions to avoid breaking gesture flow.
+      // Keep gesture state stable even if the app callback fails.
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isTriggerInFlight = false;
+        });
       }
-      setState(() {
-        _isTriggerInFlight = false;
-      });
     }
   }
 

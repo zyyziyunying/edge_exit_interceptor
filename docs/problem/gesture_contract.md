@@ -10,7 +10,11 @@ package can evolve without ambiguity about what counts as correct behavior.
 - the gesture is opt-in and page-local
 - the gesture may start only from the leading edge hit area
 - the gesture should prefer horizontal intent over vertical movement
-- when disabled, the widget should not react visually or invoke callbacks
+- when disabled, the widget should not start new interactions or invoke callbacks
+- if the widget is disabled during an active drag, it may finish a reset
+  animation before fully returning to a plain child
+- if native or Cupertino route back gestures still exist on the page, the app
+  must disable or avoid them separately
 
 ## Drag behavior
 
@@ -25,6 +29,7 @@ package can evolve without ambiguity about what counts as correct behavior.
 - release may trigger `onTrigger` exactly once for that gesture
 - trigger conditions may include distance threshold or fling velocity
 - callback invocation must happen before any app-level pop decision
+- callback failures must not leave the widget in a broken gesture state
 
 ## Explicit non-goals for v1
 
@@ -36,6 +41,7 @@ package can evolve without ambiguity about what counts as correct behavior.
 
 The package owns gesture recognition and feedback.
 The app owns exit decisions.
+The app also owns any native-route back-gesture suppression required for a page.
 
 Typical usage:
 

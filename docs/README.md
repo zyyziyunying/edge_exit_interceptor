@@ -13,4 +13,5 @@ constraints, and implementation notes evolve with the code.
 - `docs/problem/mvp_scope.md`
 - `docs/problem/implementation_plan.md`
 - `docs/problem/gesture_contract.md`
+- `docs/problem/review_check_2026-04-05.md`
 - `docs/knowledge/ios_popscope_limitations.md`
