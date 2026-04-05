@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:edge_exit_interceptor/edge_exit_interceptor.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -169,5 +171,84 @@ void main() {
       find.byKey(const Key('edge_exit_interceptor.child_transform')),
       findsNothing,
     );
+  });
+
+  testWidgets(
+    'while trigger is in flight, gestures do not trigger repeatedly',
+    (tester) async {
+      final Completer<void> completer = Completer<void>();
+      int triggerCount = 0;
+
+      await tester.pumpWidget(
+        _buildHarness(
+          interceptor: EdgeExitInterceptor(
+            onTrigger: (_) {
+              triggerCount += 1;
+              return completer.future;
+            },
+            config: const EdgeExitInterceptorConfig(triggerOffset: 20),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+
+      final Offset topLeft = tester.getTopLeft(
+        find.byType(EdgeExitInterceptor),
+      );
+      await tester.dragFrom(
+        topLeft + const Offset(2, 100),
+        const Offset(40, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(triggerCount, 1);
+
+      await tester.dragFrom(
+        topLeft + const Offset(2, 100),
+        const Offset(40, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(triggerCount, 1);
+      expect(_childTranslationX(tester), closeTo(0, 0.01));
+
+      completer.complete();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      await tester.dragFrom(
+        topLeft + const Offset(2, 100),
+        const Offset(40, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(triggerCount, 2);
+    },
+  );
+
+  testWidgets('trigger lock is released when callback throws', (tester) async {
+    int triggerCount = 0;
+
+    await tester.pumpWidget(
+      _buildHarness(
+        interceptor: EdgeExitInterceptor(
+          onTrigger: (_) async {
+            triggerCount += 1;
+            if (triggerCount == 1) {
+              throw StateError('expected test error');
+            }
+          },
+          config: const EdgeExitInterceptorConfig(triggerOffset: 20),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+
+    final Offset topLeft = tester.getTopLeft(find.byType(EdgeExitInterceptor));
+
+    await tester.dragFrom(topLeft + const Offset(2, 100), const Offset(40, 0));
+    await tester.pumpAndSettle();
+    expect(triggerCount, 1);
+
+    await tester.dragFrom(topLeft + const Offset(2, 100), const Offset(40, 0));
+    await tester.pumpAndSettle();
+    expect(triggerCount, 2);
   });
 }
